@@ -162,6 +162,17 @@ void loop() {
   
 };
 
-void run_motor(int duty, PinName motorPin) {
-  //if the duty scaling
+void run_motor(int duty, PinName motorPin_F, PinName motorPin_B) {
+  //duty: if > 0, turn motor forward as described above
+  //      if < 0, turn motor backward as described above
+  //if the duty scaling is negative then run the motor backwards, if positive then run motor forwards
+  if (duty > 0) {
+    pwm_start(motorPin_B,PWMfreq,1,TICK_COMPARE_FORMAT);
+    pwm_start(motorPin_F,PWMfreq,duty,TICK_COMPARE_FORMAT);
+  } else {
+    pwm_start(motorPin_F,PWMfreq,1,TICK_COMPARE_FORMAT);
+    if (duty == 0) {
+      duty = 1;
+    }
+    pwm_start(motorPin_B,PWMfreq,duty,TICK_COMPARE_FORMAT);
 }
