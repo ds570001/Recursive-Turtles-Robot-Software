@@ -6,6 +6,13 @@
 //***************************************************
 /*
 NOTE: LEFT AND RIGHT IS ORIENTED AS IF YOU WERE RIDING THE ROBOT (LIKE DRIVING A CAR)
+
+
+NOTES FOR IMPROVEMENT: GOING AROUND CURVES STILL SUCKS, SO WE MAY NEED TO FIGURE OUT A WAY TO SLOW DOWN THE ROBOT WHEN IT GOES AROUND CURVES.
+                       STILL GETTING SMALL OSCILLATIONS...
+                       THE LEFT MOTOR DOES NOT TURN AS FAST, fix it
+                       THE TAPE SENSORS ARE PRETTY CLOSE TOGETHER... COULD MAKE THEM FARTHER APART
+                       THE DISTANCE_BETWEEN_SENSORS VARIABLE COULD BE PLAYED AROUND WITH AND THE
 */
 //***************************************************
 
@@ -33,7 +40,7 @@ NOTE: LEFT AND RIGHT IS ORIENTED AS IF YOU WERE RIDING THE ROBOT (LIKE DRIVING A
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 int previous_error = STARTING_DUMMY_VALUE; //dummy starting value
-int dist_between_sensors = 4; //may have to do more precise measurements on this...
+int dist_between_sensors = 10; //may have to do more precise measurements on this...
 //need to have it be far enough away for this error to have meaning but also for there to be big enough range in reflectance values...
 double gain_scaling_factor = 1.0; //scales down the gain input from the potentiometers.
 int current_state_count = 1; //beginning of counting
@@ -42,10 +49,27 @@ int previous_state = STARTING_DUMMY_VALUE; //dummy starting value;
 double correction_scaling_factor = 2.0; //play around with this value to get g value to fit within duty range.
 int max_motor_duty = 65535; //max number the duty can be in motor format
 int min_motor_duty = 1; //min number used for linearization?
-int nominal_motor_L_duty = 35000;
-int nominal_motor_R_duty = 35000;
+int nominal_motor_L_duty = 30000;
+int nominal_motor_R_duty = 30000;
 int num_loops = 0;
-double slope_scaling_factor = 50.0;
+double slope_scaling_factor = 100.0;
+
+void run_motor(int duty, PinName motorPin_F, PinName motorPin_B) {
+  //duty: if > 0, turn motor forward as described above
+  //      if < 0, turn motor backward as described above
+  //if the duty scaling is negative then run the motor backwards, if positive then run motor forwards
+  if (duty > 0) {
+    pwm_start(motorPin_B,PWMfreq,1,TICK_COMPARE_FORMAT);
+    pwm_start(motorPin_F,PWMfreq,duty,TICK_COMPARE_FORMAT);
+  } else {
+    duty = duty*(-1);
+    pwm_start(motorPin_F,PWMfreq,1,TICK_COMPARE_FORMAT);
+    if (duty == 0) {
+      duty = 1;
+    }
+    pwm_start(motorPin_B,PWMfreq,duty,TICK_COMPARE_FORMAT);
+  }
+};
 
 void setup() {
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
@@ -70,24 +94,10 @@ void setup() {
   pinMode(MOTOR_L_R, OUTPUT); //PA_2 and PA_3 dont work
   pinMode(MOTOR_R_F, OUTPUT);
   pinMode(MOTOR_R_R, OUTPUT);
-}
 
-void run_motor(int duty, PinName motorPin_F, PinName motorPin_B) {
-  //duty: if > 0, turn motor forward as described above
-  //      if < 0, turn motor backward as described above
-  //if the duty scaling is negative then run the motor backwards, if positive then run motor forwards
-  if (duty > 0) {
-    pwm_start(motorPin_B,PWMfreq,1,TICK_COMPARE_FORMAT);
-    pwm_start(motorPin_F,PWMfreq,duty,TICK_COMPARE_FORMAT);
-  } else {
-    duty = duty*(-1);
-    pwm_start(motorPin_F,PWMfreq,1,TICK_COMPARE_FORMAT);
-    if (duty == 0) {
-      duty = 1;
-    }
-    pwm_start(motorPin_B,PWMfreq,duty,TICK_COMPARE_FORMAT);
-  }
-};
+  run_motor(nominal_motor_L_duty,MOTOR_L_F,MOTOR_L_R);
+  run_motor(nominal_motor_R_duty,MOTOR_R_F,MOTOR_R_R);
+}
 
 void loop() {
 
@@ -147,8 +157,8 @@ void loop() {
   int d_gain = analogRead(d_pot);
   //int i_gain - probably shouldnt impement this...
 
-  p_gain = p_gain / gain_scaling_factor;
-  d_gain = d_gain / gain_scaling_factor;
+  p_gain = p_gain * gain_scaling_factor;
+  d_gain = d_gain * gain_scaling_factor;
 
   //proportional control
   double p = error*p_gain;
