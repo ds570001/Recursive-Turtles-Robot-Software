@@ -2,8 +2,6 @@
 #include <Wire.h>
 #include <SPI.h>
 #include <Adafruit_SSD1306.h>
-#include <iostream>
-#include <list>
 
 //***************************************************
 /*
@@ -42,6 +40,10 @@ int current_state_count = 1; //beginning of counting
 int previous_state_count = STARTING_DUMMY_VALUE; //dummy starting value
 int previous_state = STARTING_DUMMY_VALUE; //dummy starting value;
 double correction_scaling_factor = 1.0; //play around with this value to get g value to fit within duty range.
+int max_motor_duty = 65535; //max number the duty can be in motor format
+int min_motor_duty = 1; //min number used for linearization?
+int nominal_motor_L_duty = 45000;
+int nominal_motor_R_duty = 45000;
 
 void setup() {
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
@@ -129,9 +131,12 @@ void loop() {
     error = dist_between_sensors; // pretty sure this case is impossible, but just in case, I'm going with the 50% chance that the robot will be on the right side of the tape...
   }
 
-  double p_gain = analogRead(p_pot) / gain_scaling_factor; //purely for testing - once we have the final values we will remove the potentiometers
-  double d_gain = analogRead(d_pot) / gain_scaling_factor;
+  int p_gain = analogRead(p_pot); //purely for testing - once we have the final values we will remove the potentiometers
+  int d_gain = analogRead(d_pot);
   //int i_gain - probably shouldnt impement this...
+
+  p_gain = p_gain / gain_scaling_factor;
+  d_gain = d_gain / gain_scaling_factor;
 
   display.setCursor(0,0);
   display.print("pg");
@@ -200,4 +205,5 @@ void run_motor(int duty, PinName motorPin_F, PinName motorPin_B) {
       duty = 1;
     }
     pwm_start(motorPin_B,PWMfreq,duty,TICK_COMPARE_FORMAT);
-}
+  }
+};
