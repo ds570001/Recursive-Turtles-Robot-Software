@@ -35,15 +35,17 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 int previous_error = STARTING_DUMMY_VALUE; //dummy starting value
 int dist_between_sensors = 4; //may have to do more precise measurements on this...
 //need to have it be far enough away for this error to have meaning but also for there to be big enough range in reflectance values...
-double gain_scaling_factor = 10.0; //scales down the gain input from the potentiometers.
+double gain_scaling_factor = 1.0; //scales down the gain input from the potentiometers.
 int current_state_count = 1; //beginning of counting
 int previous_state_count = STARTING_DUMMY_VALUE; //dummy starting value
 int previous_state = STARTING_DUMMY_VALUE; //dummy starting value;
-double correction_scaling_factor = 1.0; //play around with this value to get g value to fit within duty range.
+double correction_scaling_factor = 2.0; //play around with this value to get g value to fit within duty range.
 int max_motor_duty = 65535; //max number the duty can be in motor format
 int min_motor_duty = 1; //min number used for linearization?
-int nominal_motor_L_duty = 45000;
-int nominal_motor_R_duty = 45000;
+int nominal_motor_L_duty = 35000;
+int nominal_motor_R_duty = 35000;
+int num_loops = 0;
+double slope_scaling_factor = 50.0;
 
 void setup() {
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
@@ -51,6 +53,13 @@ void setup() {
   // Displays Adafruit logo by default. call clearDisplay immediately if you don't want this.
   display.display();
   delay(2000);
+
+  display.clearDisplay();
+  display.setTextSize(2);
+  display.setTextColor(SSD1306_WHITE);
+  display.setCursor(0,0);
+  display.println("Hello world!");
+  display.display();
 
   pinMode(TAPE_SENSOR_L, INPUT);
   pinMode(TAPE_SENSOR_R, INPUT);
@@ -63,21 +72,24 @@ void setup() {
   pinMode(MOTOR_R_R, OUTPUT);
 }
 
+void run_motor(int duty, PinName motorPin_F, PinName motorPin_B) {
+  //duty: if > 0, turn motor forward as described above
+  //      if < 0, turn motor backward as described above
+  //if the duty scaling is negative then run the motor backwards, if positive then run motor forwards
+  if (duty > 0) {
+    pwm_start(motorPin_B,PWMfreq,1,TICK_COMPARE_FORMAT);
+    pwm_start(motorPin_F,PWMfreq,duty,TICK_COMPARE_FORMAT);
+  } else {
+    duty = duty*(-1);
+    pwm_start(motorPin_F,PWMfreq,1,TICK_COMPARE_FORMAT);
+    if (duty == 0) {
+      duty = 1;
+    }
+    pwm_start(motorPin_B,PWMfreq,duty,TICK_COMPARE_FORMAT);
+  }
+};
+
 void loop() {
-  /*
-  display.clearDisplay();
-  display.setCursor(0,0);
-  display.print("L:");
-  int detection_L = analogRead(TAPE_SENSOR_L); //range: 0-1023
-  int detection_R = analogRead(TAPE_SENSOR_R);
-  display.setCursor(30,0);
-  display.print(detection_L);
-  display.setCursor(0,20);
-  display.print("R:");
-  display.setCursor(30,20);
-  display.print(detection_R);
-  display.display();
-  */
 
   /*
   convert analog values to digital values (if above threshold or below threshold)
@@ -138,15 +150,6 @@ void loop() {
   p_gain = p_gain / gain_scaling_factor;
   d_gain = d_gain / gain_scaling_factor;
 
-  display.setCursor(0,0);
-  display.print("pg");
-  display.setCursor(15,0);
-  display.print(p_gain);
-  display.setCursor(40,0);
-  display.print("dg");
-  display.setCursor(55,0);
-  display.print(d_gain);
-
   //proportional control
   double p = error*p_gain;
 
@@ -164,46 +167,68 @@ void loop() {
   }
 
   if (previous_state_count != STARTING_DUMMY_VALUE) {
-     slope = (error - previous_state) / (previous_state_count + current_state_count - 1); //-1 because i want it to be the true difference in time (time final - time initial), not with an extra increment (look at the graph at the end of lecture 5 to understand what I mean)
+     slope = (double)(error - previous_state) / (previous_state_count + current_state_count - 1) * slope_scaling_factor; //-1 because i want it to be the true difference in time (time final - time initial), not with an extra increment (look at the graph at the end of lecture 5 to understand what I mean)
      d = slope*d_gain;
   }
   previous_error = error;
+  //potential bug: derivative does not go to 0 as soon as tape sensors are aligned on tape. Have to test and see if this is an issue or not.
 
-  int g = (p+d) / correction_scaling_factor;
+  int g = (p+d) * correction_scaling_factor;
 
-  display.setCursor(0,20);
-  display.print("p");
-  display.setCursor(15,20);
-  display.print(p);
-  display.setCursor(30,20);
-  display.print("d");
-  display.setCursor(45,20);
-  display.print(d);
-  display.setCursor(60,20);
-  display.print("g");
-  display.setCursor(75,20);
-  display.print(g);
+  if (num_loops % 10 == 0) { //shouldnt print to screen every loop -> slows down tape following execution
+    
+    display.setCursor(0,0);
+    display.print("pg");
+    display.setCursor(25,0);
+    display.print(p_gain);
+    display.setCursor(63,0);
+    display.print("dg");
+    display.setCursor(88,0);
+    display.print(d_gain);
+    display.setCursor(0,20);
+    display.print("p");
+    display.setCursor(13,20);
+    display.print((int)p);
+    display.setCursor(0,40);
+    display.print("d");
+    display.setCursor(13,40);
+    display.print((int)d);
+    display.setCursor(50,40);
+    display.print((int)g);
 
-  //implement motor stuff now... -> give g to motor function...
+    /*
+    display.setCursor(60,20);
+    display.print("g");
+    display.setCursor(75,20);
+    display.print(g);
+    */
+    /*
+    display.setCursor(0,0);
+    display.print(previous_error);
+    display.setCursor(0,20);
+    display.print(previous_state_count);
+    display.setCursor(0,40);
+    display.print(current_state_count);
+    display.setCursor(25,0);
+    display.print(slope);
+    display.setCursor(75,20);
+    display.print(error);
+    display.setCursor(75,40);
+    display.print(previous_state);
+    */
+
+    display.display();
+  }
+
+  if (error > 0) {
+    run_motor(nominal_motor_R_duty + g,MOTOR_R_F,MOTOR_R_R);
+  } else if (error < 0) {
+    run_motor(nominal_motor_L_duty + g*(-1),MOTOR_L_F,MOTOR_L_R);
+  } else {
+    run_motor(nominal_motor_R_duty,MOTOR_R_F,MOTOR_R_R);
+    run_motor(nominal_motor_L_duty,MOTOR_L_F,MOTOR_L_R);
+  }
 
   //have to incorporate linearization through experimentation
-  //shouldnt print to screen every loop -> slows down robot
-  
-};
-
-void run_motor(int duty, PinName motorPin_F, PinName motorPin_B) {
-  //duty: if > 0, turn motor forward as described above
-  //      if < 0, turn motor backward as described above
-  //if the duty scaling is negative then run the motor backwards, if positive then run motor forwards
-  if (duty > 0) {
-    pwm_start(motorPin_B,PWMfreq,1,TICK_COMPARE_FORMAT);
-    pwm_start(motorPin_F,PWMfreq,duty,TICK_COMPARE_FORMAT);
-  } else {
-    duty = duty*(-1);
-    pwm_start(motorPin_F,PWMfreq,1,TICK_COMPARE_FORMAT);
-    if (duty == 0) {
-      duty = 1;
-    }
-    pwm_start(motorPin_B,PWMfreq,duty,TICK_COMPARE_FORMAT);
-  }
+  num_loops++;
 };
