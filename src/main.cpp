@@ -50,7 +50,7 @@ void setup() {
   display.display();
   delay(2000);
 
-  pinMode(TAPE_SENSOR_L,INPUT);
+  pinMode(TAPE_SENSOR_L, INPUT);
   pinMode(TAPE_SENSOR_R, INPUT);
   pinMode(p_pot,INPUT);
   pinMode(d_pot,INPUT);
@@ -89,6 +89,8 @@ void loop() {
   g = p+d+i
   send g (with scaling) to run motor function.
   */
+
+  display.clearDisplay();
 
   int position_L_analog = analogRead(TAPE_SENSOR_L);
   int position_R_analog = analogRead(TAPE_SENSOR_R);
@@ -131,6 +133,15 @@ void loop() {
   double d_gain = analogRead(d_pot) / gain_scaling_factor;
   //int i_gain - probably shouldnt impement this...
 
+  display.setCursor(0,0);
+  display.print("pg");
+  display.setCursor(15,0);
+  display.print(p_gain);
+  display.setCursor(40,0);
+  display.print("dg");
+  display.setCursor(55,0);
+  display.print(d_gain);
+
   //proportional control
   double p = error*p_gain;
 
@@ -155,6 +166,19 @@ void loop() {
 
   int g = (p+d) / correction_scaling_factor;
 
+  display.setCursor(0,20);
+  display.print("p");
+  display.setCursor(15,20);
+  display.print(p);
+  display.setCursor(30,20);
+  display.print("d");
+  display.setCursor(45,20);
+  display.print(d);
+  display.setCursor(60,20);
+  display.print("g");
+  display.setCursor(75,20);
+  display.print(g);
+
   //implement motor stuff now... -> give g to motor function...
 
   //have to incorporate linearization through experimentation
@@ -170,6 +194,7 @@ void run_motor(int duty, PinName motorPin_F, PinName motorPin_B) {
     pwm_start(motorPin_B,PWMfreq,1,TICK_COMPARE_FORMAT);
     pwm_start(motorPin_F,PWMfreq,duty,TICK_COMPARE_FORMAT);
   } else {
+    duty = duty*(-1);
     pwm_start(motorPin_F,PWMfreq,1,TICK_COMPARE_FORMAT);
     if (duty == 0) {
       duty = 1;
