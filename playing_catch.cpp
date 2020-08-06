@@ -99,3 +99,15 @@ void do_entertainment(){
     }
   }
 }
+void loop(){
+  if (collisions > 15){
+    clear_display();
+    display.print("collisions: ");
+    display.println(collisions);
+    display.display();
+    if (collisions > 18){
+      stop_motors();
+      do_entertainment();
+    }
+  }
+}
