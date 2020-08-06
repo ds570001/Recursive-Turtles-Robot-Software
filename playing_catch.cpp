@@ -41,8 +41,8 @@ void run_motor(int duty, PinName motorPin_F, PinName motorPin_B) {
   }
 };
 
-// runs a certain servo from angle start to angle end, increment angle by int speed each loop
-void run_servo(Servo this_servo, int start, int end, int speed){
+// runs a certain servo from angle start to angle end, increment by 1 degree each loop, and wait speed milliseconds
+void run_servo_2(Servo this_servo, int start, int end, int speed){
   if (start < end){
     for (int angle = start; angle <= end; angle++){
       this_servo.write(angle);
@@ -72,6 +72,11 @@ double get_distance(){
   // Calculating the distance
   double distance = duration*0.034/2;
   return distance;
+}
+
+void wag(){
+  run_servo_2(back_servo, HATCH_UP, HATCH_UP + 60, 5);
+  run_servo_2(back_servo, HATCH_UP + 60, HATCH_UP, 5);
 }
 
 void do_entertainment(){
