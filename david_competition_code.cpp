@@ -34,7 +34,7 @@ int prev_position_L = 0, prev_position_R = 0;
 #define NOMINAL_MOTOR_L_DUTY 30000
 #define NOMINAL_MOTOR_R_DUTY 30000
 #define REVERSE_DUTY -30000
-#define REVERSE_FACTOR 1.03
+#define REVERSE_FACTOR 1.05
 #define OTHER_WHEEL_CORRECTION_FACTOR 1.6
 #define MAX_STATES_BEFORE_CLEAR 15
 #define SLOPE_SCALING_FACTOR 30.0
@@ -67,6 +67,8 @@ int loop_count = 0;
 #define ECHO PA11
 #define TRIG PA12
 #define MIN_DETECTION_DIST 32
+#define COLLECTION_DIST 20
+#define WHACKER_DELAY 25
 double distance = 0.0;
 
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
@@ -170,10 +172,12 @@ void spin(int direction){
   if (direction == COUNTERCLOCKWISE){
     run_motor(RIGHT_SPIN_DUTY, RIGHT_F_MOTOR, RIGHT_B_MOTOR);
     run_motor(-20000, LEFT_F_MOTOR, LEFT_B_MOTOR);
+    delay(10);
   } 
   else if (direction == CLOCKWISE){
     run_motor(-20000, RIGHT_F_MOTOR, RIGHT_B_MOTOR);
     run_motor(SPIN_DUTY, LEFT_F_MOTOR, LEFT_B_MOTOR);   
+    delay(10);
   }
 
 }
@@ -181,11 +185,13 @@ void spin(int direction){
 void back_spin(int direction){
   if (direction == COUNTERCLOCKWISE){
     run_motor(1, RIGHT_F_MOTOR, RIGHT_B_MOTOR);
-    run_motor(-SPIN_DUTY, LEFT_F_MOTOR, LEFT_B_MOTOR);
+    run_motor(-MAX_MOTOR_DUTY, LEFT_F_MOTOR, LEFT_B_MOTOR);
+    delay(20);
   } 
   else if (direction == CLOCKWISE){
-    run_motor(-SPIN_DUTY, RIGHT_F_MOTOR, RIGHT_B_MOTOR);
-    run_motor(1, LEFT_F_MOTOR, LEFT_B_MOTOR);   
+    run_motor(-MAX_MOTOR_DUTY, RIGHT_F_MOTOR, RIGHT_B_MOTOR);
+    run_motor(1, LEFT_F_MOTOR, LEFT_B_MOTOR);
+    delay(20);   
   }
 }
 
@@ -381,19 +387,21 @@ int get_simple_error(int previous_error, int position_L, int position_R){
 
 // returns proportional term given the error
 double get_p(int error){
-  double p_gain = analogRead(p_pot); //purely for testing - once we have the final values we will remove the potentiometers
-  p_gain = p_gain * P_READ_FACTOR;
+  //double p_gain = analogRead(p_pot); //purely for testing - once we have the final values we will remove the potentiometers
+  double p_gain = 970;
+  //p_gain * P_READ_FACTOR;
   
   // display.print("p gain: ");
   // display.println(p_gain);
-  
   return error*p_gain;
 }
 
 //returns derivative term given the error and previous error
 double get_d(int error, int previous_error){
-  double d_gain = analogRead(d_pot);
-  d_gain = d_gain * D_READ_FACTOR;
+  // double d_gain = analogRead(d_pot);
+  double d_gain = 306;
+  // d_gain * D_READ_FACTOR;
+
 
   // display.print("d gain: ");
   // display.println(d_gain);
@@ -533,9 +541,13 @@ void back_up_until_bin(){
   display.display();
   stop_motors();
 
+  run_motor(REVERSE_DUTY*1.1, RIGHT_F_MOTOR, RIGHT_B_MOTOR);
+  run_motor(REVERSE_DUTY, LEFT_F_MOTOR, LEFT_B_MOTOR);
+  delay(500);
+  stop_motors();
   while(prev_collisions == collisions){
-    run_motor(REVERSE_DUTY*REVERSE_FACTOR, RIGHT_F_MOTOR, RIGHT_B_MOTOR);
-    run_motor(REVERSE_DUTY, LEFT_F_MOTOR, LEFT_B_MOTOR);
+    run_motor(REVERSE_DUTY, RIGHT_F_MOTOR, RIGHT_B_MOTOR);
+    run_motor(REVERSE_DUTY*1.05, LEFT_F_MOTOR, LEFT_B_MOTOR);
     delay(10);
   }
   stop_motors();
@@ -572,14 +584,50 @@ void check_sensors(){
   clear_display();
   get_sensor_position (TAPE_SENSOR_L);
   get_sensor_position (TAPE_SENSOR_R);
-  display.print("d gain: ");
-  display.println(analogRead(d_pot) * D_READ_FACTOR);
-  display.print("p gain: ");
-  display.println(analogRead(p_pot) * P_READ_FACTOR);
+  // display.print("d gain: ");
+  // display.println(analogRead(d_pot) * D_READ_FACTOR);
+  // display.print("p gain: ");
+  // display.println(analogRead(p_pot) * P_READ_FACTOR);
   display.display();
 }
 
+void wag(){
+  run_servo(back_servo, HATCH_UP, HATCH_UP + 60, 5);
+  run_servo(back_servo, HATCH_UP + 60, HATCH_UP, 5);
+}
+
+void do_entertainment(){
+  zero_servos();
+  stop_motors();
+  while (true){
+    clear_display();
+    display.print("PLAYING CATCH");
+    display.display();
+    zero_servos();
+    if (get_distance() < 35 && get_distance() > 25){
+      delay(500);
+      whacker_servo.write(WHACKER_OPEN);
+      delay(500);
+      whacker_servo.write(WHACKER_OPEN + 40);
+      delay(500);
+      wag();
+      wag();
+      wag();
+    }
+  }
+}
+
 void loop() {
+  if (collisions > 15){
+    clear_display();
+    display.print("collisions: ");
+    display.println(collisions);
+    display.display();
+    if (collisions > 18){
+      stop_motors();
+      do_entertainment();
+    }
+  }
   if (loop_count % 150 == 0){
     check_sensors();
   }
@@ -589,10 +637,22 @@ void loop() {
 
   if (distance < MIN_DETECTION_DIST){
     if (get_distance() < MIN_DETECTION_DIST){
-      stop_motors();
-      delay(100);
-      perform_can_collection();
-      distance = get_distance();
+      if (distance < COLLECTION_DIST){
+        stop_motors();
+        delay(100);
+        perform_can_collection();
+        distance = get_distance();
+      }
+      else {
+        for (int i = 0; i < WHACKER_DELAY; i ++){
+          tape_follow();
+        }
+        stop_motors();
+        delay(100);
+        perform_can_collection();
+        distance = get_distance();
+      }
+
     }
   } 
   else{
